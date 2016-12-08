@@ -26,6 +26,23 @@ if logger:
     http://stackoverflow.com/questions/6618795/get-locals-from-calling-namespace-in-python
 
     Call the project behold and the class Behold
+
+    I also want context managers and decorators for setting global state
+
+    with Behold.using_global(x=1, y=2):
+        my_func_here()
+
+    with using_global(x=1, y=2):
+        my_func_here()
+
+    @Behold.using_global(x=1, y=2)
+    def my func():
+        pass
+
+    @using_global(x=1, y=2)
+    def my func():
+        pass
+
 """
 
 class Behold(object):
@@ -59,7 +76,7 @@ class Behold(object):
         return op, name
 
     def set_global(self, **kwargs):
-        self.__class__..global_state.update(kwargs)
+        self.__class__.global_state.update(kwargs)
 
     def when_all_global(self, **criteria):
         return self
@@ -76,11 +93,11 @@ class Behold(object):
     def values(self, *fields):
         return self
 
-    def load_global(self):
+    def load_global_context(self):
         # method to load any state required by pretty stuff
         return self
 
-    def load_local(self):
+    def load_local_context(self):
         # method to load any state required by pretty stuff
         return self
 
