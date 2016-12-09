@@ -74,10 +74,21 @@ class Behold(object):
             finally:
                 del frame
 
+        if not isinstance(item, dict):
+            try:
+                item = item.__dict__
+            except:
+                raise ValueError(
+                    'The \'Behold\' object can only process items that are '
+                    'dicts or that have a .__dict__ attribute.'
+                )
+
         self.item = item
         self.tag = tag
         self.all_filters = []
         self.any_filters = []
+        self.all_context_filters = []
+        self.any_context_filters = []
 
     def _key_to_field_op(self, key):
         op = operator.eq
@@ -99,38 +110,118 @@ class Behold(object):
             if key in cls._context:
                 cls._context.pop(key)
 
-    def when_all_context(self, **criteria):
-        return self
+    def _add_filters(self, exclude, in_context, join_with, **criteria):
 
-    def when_any_context(self, **criteria):
-        return self
+        #TODO: make sure you test all 4 combos
+        # keyed on (in_context, join_with)
+        filters_list = {
+            (False, 'all'): self.all_filters,
+            (True, 'all'): self.all_context_filters,
+            (False, 'any'): self.any_filters,
+            (True, 'any'): self.any_context_filters,
+        }[(in_context, join_with)]
+
+        for key, val in criteria.items():
+            op, field = self._key_to_field_op(key)
+            filters_list.append((op, field, val, exclude))
+
+    def _passes_one_filter(
+            self, filter_list, is_context=False, is_any_filter=False):
+        # set the item you are comparing to based on whether or not this is
+        # a context comparison
+        if is_context:
+            item = self.__class__._context
+        else:
+            item = self.item
+
+        passes = not is_any_filter
+        for (op, field, filter_val, exclude) in self._filters:
+            # do not use the extractor for context variables
+            if is_context:
+                field_val = item[field]
+            else:
+                field_val = self.extract(item, field)
+            passes = exclude ^ op(field_val, val)
+            if (not is_any_filter) ^ passes:
+                break
+        return passes
+
+    def _passes_filter(self):
+        # tuples are (filter_list, is_context, is_any_filter)
+        filter_tuples = [
+            (self.all_filters, False, False),
+            (self.any_filters, False, True),
+            (self.all_context_filters, True, False),
+            (self.any_context_filters, True, True),
+        ]
+
+        passes = True
+        for filter_list, is_context, is_any_filter in filter_tuples:
+            passes = self._passes_one_filter(filter_list, is_context, is_any_filter)
+            if not passes:
+                break
+        return passes
 
     def when_all(self, **criteria):
+        self._add_filters(
+            exclude=False, in_context=False, join_with='all', **criteria)
         return self
 
     def when_any(self, **criteria):
+        self._add_filters(
+            exclude=False, in_context=False, join_with='any', **criteria)
+        return self
+
+    def exlude_when_any(self, **criteria):
+        self._add_filters(
+            exclude=True, in_context=False, join_with='any', **criteria)
+        return self
+
+    def exlude_when_all(self, **criteria):
+        self._add_filters(
+            exclude=True, in_context=False, join_with='all', **criteria)
+        return self
+
+    def when_all_in_context(self, **criteria):
+        self._add_filters(
+            exclude=False, in_context=True, join_with='all', **criteria)
+        return self
+
+    def when_any_in_context(self, **criteria):
+        self._add_filters(
+            exclude=False, in_context=True, join_with='any', **criteria)
+        return self
+
+    def exlude_when_any_in_context(self, **criteria):
+        self._add_filters(
+            exclude=True, in_context=True, join_with='any', **criteria)
+        return self
+
+    def exlude_when_all_in_context(self, **criteria):
+        self._add_filters(
+            exclude=True, in_context=True, join_with='all', **criteria)
         return self
 
     def values(self, *fields):
         return self
 
-    def load_global_context(self):
-        # method to load any state required by pretty stuff
-        return self
+    @classmethod
+    def load_global_state(cls):
+        """
+        Used for loading any state needed for transform method
+        """
 
-    def load_local_context(self):
-        # method to load any state required by pretty stuff
-        return self
-
-    def pretty(self, item, key, value):
-        # hook to transorm printed stuff
-        return self
+    def extract(self, item, name):
+        return self.item[name]
 
     def __repr__(self):
         return self.__str__()
 
     def __str__(self):
         return 'behold'
+
+    def __bool__(self):
+        return self._passes_filter()
 
 
 class in_context(object):
@@ -156,9 +247,16 @@ class in_context(object):
 x, y = 1, 2
 def dummy():
     a, b = 1, 2
-    behold = Behold()
+    dd = {'c': 1, 'd': 2}
+    class Rob(object):
+        def __init__(self):
+            self.e = 1
+            self.f = 2
+    r = Rob()
+    behold = Behold(r)
     print
-    print behold.item
+    from pprint import pprint
+    pprint(behold.item)
 dummy()
 
 #@in_context(what='decorator')
