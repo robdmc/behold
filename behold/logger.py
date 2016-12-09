@@ -43,73 +43,94 @@ if logger:
     def my func():
         pass
 
+
+Look at this for multiple python versions
+https://gist.github.com/pombredanne/72130ee6f202e89c13bb
+
 """
 
-class Behold(object):
-   _global_state = {}
+class in_global_context(object):
+    def __call__(self, f):
+        @functools.wraps(f)
+        def decorated(*args, **kwds):
+            with self:
+                return f(*args, **kwds)
+        return decorated
 
-    _op_for = {
-        '__lt': operator.lt,
-        '__lte': operator.le,
-        '__le': operator.le,
-        '__gt': operator.gt,
-        '__gte': operator.ge,
-        '__ge': operator.ge,
-        '__ne': operator.ne,
-        '__in': lambda value, options: value in options
-    }
+    def __enter__(self):
+        pass
 
-    def __init__(self, item, tag=None):
-        self.item = item
-        self.tag = tag
-        self.all_filters = []
-        self.any_filters = []
+    def __exit__(self):
+        pass
 
-    def _key_to_field_op(self, key):
-        op = operator.eq
-        name = key
-        for op_name, trial_op in self.__class__._op_for.items():
-            if key.endswith(op_name):
-                op = trial_op
-                name = key.split('__')[0]
-                break
-        return op, name
 
-    def set_global(self, **kwargs):
-        self.__class__.global_state.update(kwargs)
 
-    def when_all_global(self, **criteria):
-        return self
 
-    def when_any_global(self, **criteria):
-        return self
-
-    def when_all(self, **criteria):
-        return self
-
-    def when_any(self, **criteria):
-        return self
-
-    def values(self, *fields):
-        return self
-
-    def load_global_context(self):
-        # method to load any state required by pretty stuff
-        return self
-
-    def load_local_context(self):
-        # method to load any state required by pretty stuff
-        return self
-
-    def pretty(self, item, key, value):
-        # hook to transorm printed stuff
-        return self
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __str__(self):
-        return 'behold'
+#class Behold(object):
+#   _global_state = {}
+#
+#    _op_for = {
+#        '__lt': operator.lt,
+#        '__lte': operator.le,
+#        '__le': operator.le,
+#        '__gt': operator.gt,
+#        '__gte': operator.ge,
+#        '__ge': operator.ge,
+#        '__ne': operator.ne,
+#        '__in': lambda value, options: value in options
+#    }
+#
+#    def __init__(self, item, tag=None):
+#        self.item = item
+#        self.tag = tag
+#        self.all_filters = []
+#        self.any_filters = []
+#
+#    def _key_to_field_op(self, key):
+#        op = operator.eq
+#        name = key
+#        for op_name, trial_op in self.__class__._op_for.items():
+#            if key.endswith(op_name):
+#                op = trial_op
+#                name = key.split('__')[0]
+#                break
+#        return op, name
+#
+#    def update_global_context(self, **kwargs):
+#        self.__class__.global_state.update(kwargs)
+#
+#    def when_all_global(self, **criteria):
+#        return self
+#
+#    def when_any_global(self, **criteria):
+#        return self
+#
+#    def when_all(self, **criteria):
+#        return self
+#
+#    def when_any(self, **criteria):
+#        return self
+#
+#    def values(self, *fields):
+#        return self
+#
+#    def load_global_context(self):
+#        # method to load any state required by pretty stuff
+#        return self
+#
+#    def load_local_context(self):
+#        # method to load any state required by pretty stuff
+#        return self
+#
+#    def pretty(self, item, key, value):
+#        # hook to transorm printed stuff
+#        return self
+#
+#    def __repr__(self):
+#        return self.__str__()
+#
+#    def __str__(self):
+#        return 'behold'
 
 
 
