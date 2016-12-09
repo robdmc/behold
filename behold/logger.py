@@ -1,4 +1,5 @@
 import operator
+import functools
 
 """
 Input defaults to locals().  If it's a dict, then kwargs will reference keys.  Otherwise, kwargs will reference
@@ -50,6 +51,8 @@ https://gist.github.com/pombredanne/72130ee6f202e89c13bb
 """
 
 class in_global_context(object):
+    def __init__(self, **kwargs):
+        self.context = kwargs
     def __call__(self, f):
         @functools.wraps(f)
         def decorated(*args, **kwds):
@@ -58,13 +61,22 @@ class in_global_context(object):
         return decorated
 
     def __enter__(self):
-        pass
+        print '-----------entering', self.context
+        return self
 
-    def __exit__(self):
-        pass
+    def __exit__(self, *args, **kwargs):
+        print '-----------exiting', self.context
 
 
+@in_global_context(what='decorator')
+def myfunc():
+    print 'my_func'
 
+
+myfunc()
+
+with in_global_context(what='context_manager'):
+    print 'my statement'
 
 #class Behold(object):
 #   _global_state = {}
