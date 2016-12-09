@@ -1,5 +1,6 @@
 import operator
 import functools
+import inspect
 
 """
 Input defaults to locals().  If it's a dict, then kwargs will reference keys.  Otherwise, kwargs will reference
@@ -50,9 +51,94 @@ https://gist.github.com/pombredanne/72130ee6f202e89c13bb
 
 """
 
-class in_global_context(object):
-    def __init__(self, **kwargs):
-        self.context = kwargs
+class Behold(object):
+    _context = {}
+
+    _op_for = {
+        '__lt': operator.lt,
+        '__lte': operator.le,
+        '__le': operator.le,
+        '__gt': operator.gt,
+        '__gte': operator.ge,
+        '__ge': operator.ge,
+        '__ne': operator.ne,
+        '__in': lambda value, options: value in options
+    }
+
+    def __init__(self, item=None, tag=None):
+        if item is None:
+            frame = inspect.currentframe()
+            try:
+                item = frame.f_back.f_locals
+                item.update(frame.f_back.f_globals)
+            finally:
+                del frame
+
+        self.item = item
+        self.tag = tag
+        self.all_filters = []
+        self.any_filters = []
+
+    def _key_to_field_op(self, key):
+        op = operator.eq
+        name = key
+        for op_name, trial_op in self.__class__._op_for.items():
+            if key.endswith(op_name):
+                op = trial_op
+                name = key.split('__')[0]
+                break
+        return op, name
+
+    @classmethod
+    def set_context(cls, **kwargs):
+        cls._context.update(kwargs)
+
+    @classmethod
+    def unset_context(cls, *keys):
+        for key in keys:
+            if key in cls._context:
+                cls._context.pop(key)
+
+    def when_all_context(self, **criteria):
+        return self
+
+    def when_any_context(self, **criteria):
+        return self
+
+    def when_all(self, **criteria):
+        return self
+
+    def when_any(self, **criteria):
+        return self
+
+    def values(self, *fields):
+        return self
+
+    def load_global_context(self):
+        # method to load any state required by pretty stuff
+        return self
+
+    def load_local_context(self):
+        # method to load any state required by pretty stuff
+        return self
+
+    def pretty(self, item, key, value):
+        # hook to transorm printed stuff
+        return self
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __str__(self):
+        return 'behold'
+
+
+class in_context(object):
+    _behold_class = Behold
+
+    def __init__(self, **context_vars):
+        self._context_vars = context_vars
+
     def __call__(self, f):
         @functools.wraps(f)
         def decorated(*args, **kwds):
@@ -61,91 +147,28 @@ class in_global_context(object):
         return decorated
 
     def __enter__(self):
-        print '-----------entering', self.context
-        return self
+        self.__class__._behold_class.set_context(**self._context_vars)
 
     def __exit__(self, *args, **kwargs):
-        print '-----------exiting', self.context
+        self.__class__._behold_class.unset_context(*self._context_vars.keys())
 
 
-@in_global_context(what='decorator')
-def myfunc():
-    print 'my_func'
+x, y = 1, 2
+def dummy():
+    a, b = 1, 2
+    behold = Behold()
+    print
+    print behold.item
+dummy()
 
-
-myfunc()
-
-with in_global_context(what='context_manager'):
-    print 'my statement'
-
-#class Behold(object):
-#   _global_state = {}
+#@in_context(what='decorator')
+#def myfunc():
+#    print Behold._context
 #
-#    _op_for = {
-#        '__lt': operator.lt,
-#        '__lte': operator.le,
-#        '__le': operator.le,
-#        '__gt': operator.gt,
-#        '__gte': operator.ge,
-#        '__ge': operator.ge,
-#        '__ne': operator.ne,
-#        '__in': lambda value, options: value in options
-#    }
 #
-#    def __init__(self, item, tag=None):
-#        self.item = item
-#        self.tag = tag
-#        self.all_filters = []
-#        self.any_filters = []
+#myfunc()
+#print Behold._context
 #
-#    def _key_to_field_op(self, key):
-#        op = operator.eq
-#        name = key
-#        for op_name, trial_op in self.__class__._op_for.items():
-#            if key.endswith(op_name):
-#                op = trial_op
-#                name = key.split('__')[0]
-#                break
-#        return op, name
-#
-#    def update_global_context(self, **kwargs):
-#        self.__class__.global_state.update(kwargs)
-#
-#    def when_all_global(self, **criteria):
-#        return self
-#
-#    def when_any_global(self, **criteria):
-#        return self
-#
-#    def when_all(self, **criteria):
-#        return self
-#
-#    def when_any(self, **criteria):
-#        return self
-#
-#    def values(self, *fields):
-#        return self
-#
-#    def load_global_context(self):
-#        # method to load any state required by pretty stuff
-#        return self
-#
-#    def load_local_context(self):
-#        # method to load any state required by pretty stuff
-#        return self
-#
-#    def pretty(self, item, key, value):
-#        # hook to transorm printed stuff
-#        return self
-#
-#    def __repr__(self):
-#        return self.__str__()
-#
-#    def __str__(self):
-#        return 'behold'
-
-
-
-
-
+#with in_context(what='context_manager'):
+#    print Behold._context
 
