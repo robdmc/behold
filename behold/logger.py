@@ -1,59 +1,27 @@
-import operator
+from collections import defaultdict
+import copy
 import functools
 import inspect
-
-"""
-Input defaults to locals().  If it's a dict, then kwargs will reference keys.  Otherwise, kwargs will reference
-attributes.
-
-logger = DBLog(locals(), tag='mytag')  # see if I can pop stack frame to get locals
-
-DBLog.set_global(gx=1, gy=2) # can just set class attributes
-
-logger.when_all(x=1, y=2)
-logger.when_any(z=1, f=4)
-
-logger.when_all_global(x=1, y=2)
-logger.when_any_gobal(z=2, z=3)
-
-logger.values('x', 'y', 'z')
-if logger:
-    print logger
-
-    If values is set, then print in order of values.  Otherwise just print ordered keys.
-    maybe have a format option that allows 'keyvalue',  'csv', 'json'
+import operator
+import sys
 
 
-    Think about using this
-    http://stackoverflow.com/questions/6618795/get-locals-from-calling-namespace-in-python
-
-    Call the project behold and the class Behold
-
-    I also want context managers and decorators for setting global state
-
-    with Behold.using_global(x=1, y=2):
-        my_func_here()
-
-    with using_global(x=1, y=2):
-        my_func_here()
-
-    @Behold.using_global(x=1, y=2)
-    def my func():
-        pass
-
-    @using_global(x=1, y=2)
-    def my func():
-        pass
+class _Sentinal(object):
+    pass
 
 
-Look at this for multiple python versions
-https://gist.github.com/pombredanne/72130ee6f202e89c13bb
+class Item(object):
+    def __init__(_item_self_, **kwargs):
+        # I'm using unconventional "_item_self_" name here to avoid
+        # conflicts when kwargs actually contain a "self" arg.
+        for k, v in kwargs.items():
+            setattr(_item_self_, k, v)
 
-"""
 
 class Behold(object):
     # class variable to hold all context values
     _context = {}
+    _stash = defaultdict(list)
 
     # operators to handle django-style querying
     _op_for = {
@@ -67,58 +35,23 @@ class Behold(object):
         '__in': lambda value, options: value in options
     }
 
-    def __init__(self, item=None, tag=None):
-        """
-        If item is None, then locals() + globals() is used.
-        If its not None, then it must either be a dict or
-        something with a dict attribute
-        """
-        # if no item, get locals() and globals() from calling frame 
-        if item is None:
-            self.frame = inspect.currentframe().f_back
-            item = self._load_frame()
-        else:
-            self.frame = None
-
-        # if the item is not a dictionary, grab its object __dict__
-        if not isinstance(item, dict):
-            try:
-                item = item.__dict__
-            except:
-                raise ValueError(
-                    'The \'Behold\' object can only process items that are '
-                    'dicts or that have a .__dict__ attribute.'
-                )
-
-        # sore the item to work with as well as any tag for this beholder
-        self.item = item
+    def __init__(self, tag=None, auto=True, stream=None):
         self.tag = tag
-
-        # these filters will apply to item or scope variables
-        self.all_filters = []
-        self.any_filters = []
+        self.auto = auto
+        if stream is None:
+            self.stream = sys.stdout
+        else:
+            self.stream = stream
 
         # these filters apply to context variables
-        self.all_context_filters = []
-        self.any_context_filters = []
+        self.passes = True
+        self.context_filters = []
 
         # a list of fields that will be printed if filters pass
         self.print_keys = []
 
-    def _load_frame(self):
-        OKAY.  HERE IS WHAT IM DOING.  IM PRETY SURE LOCAL/GLOBALS HAVE TO GET
-        RELOADED EVERYTIME A BOOL IS CHECKED. SO IM TRYING TO GET THAT TO HAPPEN
-        HERE, BUT ITS TRICKY TO GET A FRAME REFERENCE AND DELETE IT PROPERLY
-        MAYBE I CAN SAVE THE FRAME DELETION FOR A DESTRUCTOR
-            try:
-                item = self.frame.f_back.f_locals
-                item.update(self.frame.f_back.f_globals)
-            finally:
-                se
-                del self.frame
-                self
-
-            return item
+        # holds a string rep for this object
+        self._str = ''
 
     def _key_to_field_op(self, key):
         # this method looks at a key and checks if it ends in any of the
@@ -150,196 +83,239 @@ class Behold(object):
             if key in cls._context:
                 cls._context.pop(key)
 
-    def _add_filters(self, exclude, in_context, join_with, **criteria):
-        # This is the method does all the work for creating a filter
-        # list that will then be used to determine whether or not
-        # this beholder passes filters.
+    def reset(self):
+        """
+        resets filtering state
+        """
+        self.passes = False
+        self.context_filters = []
 
-        #TODO: make sure you test all 4 combos
-        # keyed on (in_context, join_with)
-        filters_list = {
-            (False, 'all'): self.all_filters,
-            (True, 'all'): self.all_context_filters,
-            (False, 'any'): self.any_filters,
-            (True, 'any'): self.any_context_filters,
-        }[(in_context, join_with)]
+    def when(self, *bools):
+        self.passes = self.passes and all(bools)
+        return self
 
+    def excluding(self, *bools):
+        self.passes = self.passes and not any(bools)
+        return self
+
+    def when_context(self, **criteria):
+        self._add_context_filters(False, **criteria)
+        return self
+
+    def excluding_context(self, **criteria):
+        self._add_context_filters(True, **criteria)
+        return self
+
+    def _add_context_filters(self, exclude, **criteria):
         for key, val in criteria.items():
             op, field = self._key_to_field_op(key)
-            filters_list.append((op, field, val, exclude))
+            self.context_filters.append((op, field, val, exclude))
 
-    def _passes_one_filter(
-            self, filter_list, is_context=False, is_any_filter=False):
-        # This method does all the work for using the built-up state to
-        # determine whether or not this beholder passes filters.
-
-        # set the item you are comparing to based on whether or not this is
-        # a context comparison
-        if is_context:
-            item = self.__class__._context
-        else:
-            item = self.item
-
-        if not filter_list:
+    def _passes_context_filter(self):
+        if not self.context_filters:
             return True
 
-        passes = not is_any_filter
-        for (op, field, filter_val, exclude) in filter_list:
-            # do not use the extractor for context variables
-            if is_context:
-                field_val = item[field]
+        passes = False
+        for (op, field, filter_val, exclude) in self.context_filters:
+            context_val = self.__class__._context.get(field, _Sentinal())
+            if not isinstance(context_val, _Sentinal):
+                passes = exclude ^ op(context_val, filter_val)
+
+        return passes
+
+    def passes_all(self):
+        return self.passes and self._passes_context_filter()
+
+    def _separate_names_objects(self, values):
+        att_names = []
+        objs = []
+        for val in values:
+            if isinstance(val, str):
+                att_names.append(val)
             else:
-                field_val = self.extract(item, field)
-            passes = exclude ^ op(field_val, filter_val)
-            if (not is_any_filter) ^ passes:
-                break
-        return passes
+                objs.append(val)
+        return att_names, objs
 
-    def _passes_filter(self):
-        # This is the high-level method that determines whether or not
-        # this beholder passes filters.
+    def _validate_objs_data(self, objs, data):
+        # at most one object is allowed
+        if len(objs) > 1:
+            raise ValueError(
+                'Non key-word arguments to Behold() can only have '
+                'one non-string value.'
+            )
 
-        # tuples are (filter_list, is_context, is_any_filter)
-        filter_tuples = [
-            (self.all_filters, False, False),
-            (self.any_filters, False, True),
-            (self.all_context_filters, True, False),
-            (self.any_context_filters, True, True),
-        ]
+        # make sure kwargs and data not simultaneously specified
+        elif data and len(objs) == 1:
+            raise ValueError(
+                'Error in Behold().  You specified both keyword '
+                'arguments and a non-string argument. You can\'t do that.'
+            )
 
-        print '=--'
-        passes = True
-        for filter_list, is_context, is_any_filter in filter_tuples:
-            print passes
-            passes = self._passes_one_filter(filter_list, is_context, is_any_filter)
-            if not passes:
-                break
-        print passes, filter_list
-        return passes
+    def _get_item_and_att_names(self, *values, **data):
+        if not self.passes_all():
+            return None, None
 
-    def when_all(self, **criteria):
-        """
-        Beholder will evaluate to True only if all criteria are met
-        """
-        self._add_filters(
-            exclude=False, in_context=False, join_with='all', **criteria)
-        return self
+        att_names, objs = self._separate_names_objects(values)
 
-    def when_any(self, **criteria):
-        """
-        Beholder will evaluate to True if any of the criteria are met
-        """
-        self._add_filters(
-            exclude=False, in_context=False, join_with='any', **criteria)
-        return self
+        self._validate_objs_data(objs, data)
 
-    def exlude_when_all(self, **criteria):
-        """
-        Beholder will evaluate to False if all of the criteria are met
-        """
-        self._add_filters(
-            exclude=True, in_context=False, join_with='all', **criteria)
-        return self
+        # handle case of no kwargs but non string in args
+        if not data and len(objs) == 1:
+            item = objs[0]
+            if not att_names:
+                if not hasattr(item, '__dict__'):
+                    raise ValueError(
+                        'Error in Behold() The object you passed has '
+                        'no __dict__ attribute'
+                    )
+                att_names = sorted(item.__dict__.keys())
 
-    def exlude_when_any(self, **criteria):
-        """
-        Beholder will evaluate to False if any of the criteria are met
-        """
-        self._add_filters(
-            exclude=True, in_context=False, join_with='any', **criteria)
-        return self
+        # handle case of kwargs only
+        elif not objs and data:
+            item = Item(**data)
+            if not att_names:
+                att_names = sorted(data.keys())
 
+        # if no object specified, use locals()
+        else:
+            try:
+                att_dict = {}
+                calling_frame = inspect.currentframe().f_back.f_back
 
-    def when_all_in_context(self, **criteria):
-        """
-        Beholder will evaluate to True if all context criteria are met
-        """
-        self._add_filters(
-            exclude=False, in_context=True, join_with='all', **criteria)
-        return self
+                # update with local variables of the calling frame
+                att_dict.update(calling_frame.f_locals)
 
-    def when_any_in_context(self, **criteria):
-        """
-        Beholder will evaluate to True if any context criteria are met
-        """
-        self._add_filters(
-            exclude=False, in_context=True, join_with='any', **criteria)
-        return self
+                # populate att_names if it wasn't specified
+                if not att_names:
+                    att_names = sorted(att_dict.keys())
 
-    def exlude_when_all_in_context(self, **criteria):
-        """
-        Beholder will evaluate to False if all context criteria are met
-        """
-        self._add_filters(
-            exclude=True, in_context=True, join_with='all', **criteria)
-        return self
+                # make sure att_dict only has requested fields
+                att_dict = {k: att_dict.get(k, None) for k in att_names}
 
-    def exlude_when_any_in_context(self, **criteria):
-        """
-        Beholder will evaluate to False if any context criteria are met
-        """
-        self._add_filters(
-            exclude=True, in_context=True, join_with='any', **criteria)
-        return self
+                # make an item out of those locals
+                item = Item(**att_dict)
+            finally:
+                # delete the calling frame to avoid reference cycles
+                del calling_frame
 
-
-    def values(self, *fields):
-        """
-        Sets the attributes or local variables that will be returned.
-        If no arguments are specified, all attributes/variables get shown
-        in key-sorted order.
-        """
-
-        return self
+        return item, att_names
 
     @classmethod
-    def load_global_state(cls):
+    def get_stash(cls, stash_name):
+        if stash_name in cls._stash:
+            return copy.deepcopy(cls._stash[stash_name])
+        else:
+            raise ValueError(
+                '\n\nRequested name \'{}\' not in {}'.format(
+                    stash_name, list(cls._stash.keys()))
+            )
+
+    @classmethod
+    def clear_stash(cls, *names):
+        if names:
+            for name in names:
+                if name in cls._stash:
+                    del cls._stash[name]
+                else:
+                    raise ValueError(
+                        '\n\nName \'{}\' not in {}'.format(
+                            name, list(cls._stash.keys())
+                        )
+                    )
+        else:
+            cls._stash = defaultdict(list)
+
+    def stash(self, *values, **data):
+        if not self.tag:
+            raise ValueError(
+                'You must instantiate Behold with a tag name if you want to '
+                'use stashing'
+            )
+        passes_all = self.passes_all()
+        if not passes_all:
+            return False
+
+        item, att_names = self._get_item_and_att_names(*values, **data)
+        if not item:
+            self.reset()
+            return None
+        out = {name: item.__dict__.get(name, None) for name in att_names}
+
+        self.__class__._stash[self.tag].append(out)
+        self.reset()
+        return True
+
+    def get(self, *values, **data):
+        item, att_names = self._get_item_and_att_names(*values, **data)
+        if not item:
+            self.reset()
+            return None
+        out = {name: item.__dict__.get(name, None) for name in att_names}
+        return out
+
+    def show(self, *values, **data):
         """
-        Used for loading any state needed for the extract method
+        If data is provided, then that will be used as source.  In this case
+        if values are also provided, only those values are shown, otherwise all
+        in key-sorted order.
+
+        If data is not provided, *values are searched for non-string inputs.
+        Any non-string input will be treated as the data source and only
+        attributes listed in the string values will be extracted.  In this
+        case if values are all strings with no non-string, then
+        global() + locals() will be used as the data source.
         """
+        item, att_names = self._get_item_and_att_names(*values, **data)
+        if not item:
+            self.reset()
+            return False
+
+        # set the string value
+        self._str = self.stringify_item(item, att_names)
+        if self.auto:
+            self.stream.write(self._str + '\n')
+
+        passes_all = self.passes_all()
+        self.reset()
+        return passes_all
+
+    def stringify_item(self, item, att_names):
+        if not att_names:
+            raise ValueError(
+                'Error in Behold.  Could not determine attributes/'
+                'variables to show.')
+
+        out = []
+        for ind, key in enumerate(att_names):
+            out.append(key + ': ')
+            if ind < len(att_names) - 1 or self.tag:
+                ending = ', '
+            else:
+                ending = ''
+
+            val = self.extract(item, key)
+            out.append(val + ending)
+        if self.tag:
+            out.append(self.tag)
+        return ''.join(out)
 
     def extract(self, item, name):
         """
         Override this to perform any custom field extraction
         """
-        val = self.item.get(name, None)
-        if val is None:
-            val = ''
-        else:
-            val = str(val)
-        return val
-
-    def get_str(self):
-        if self.print_keys:
-            print_keys = self.print_keys
-        else:
-            print_keys = sorted(self.item.keys())
-
-        out = []
-        for ind, key in enumerate(print_keys):
-            out.append(key + ':')
-            if ind < len(print_keys) - 1 or self.tag:
-                ending = ', '
-            else:
-                ending = ''
-
-            val = self.extract(self.item, name)
-            out.append(val + ending)
-        if self.tag:
-            out.append(tag)
-        return ''.join(out)
+        val = ''
+        if hasattr(item, name):
+            val = getattr(item, name)
+        return str(val)
 
     def __str__(self):
-        if self._passes_filter():
-            return self.get_str()
-        else:
-            return ''
+        return self._str
 
     def __repr__(self):
         return self.__str__()
 
     def __bool__(self):
-        return self._passes_filter()
+        return self.passes_all()
 
 
 class in_context(object):
@@ -361,50 +337,18 @@ class in_context(object):
     def __exit__(self, *args, **kwargs):
         self.__class__._behold_class.unset_context(*self._context_vars.keys())
 
+
 def set_context(**kwargs):
     Behold.set_context(**kwargs)
 
-def unset_context(cls, *keys):
+
+def unset_context(*keys):
     Behold.unset_context(*keys)
 
 
-x, y = 1, 2
-
-for nn in range(5):
-    behold = Behold()
-    behold.values('nn', 'x', 'y').when_all(nn=2)
-    if behold:
-        print behold
+def get_stash(name):
+    return Behold.get_stash(name)
 
 
-
-
-#set_context(rob='awesome')
-
-#
-#x, y = 1, 2
-#def dummy():
-#    a, b = 1, 2
-#    dd = {'c': 1, 'd': 2}
-#    class Rob(object):
-#        def __init__(self):
-#            self.e = 1
-#            self.f = 2
-#    r = Rob()
-#    behold = Behold(r)
-#    print
-#    from pprint import pprint
-#    pprint(behold.item)
-#dummy()
-
-#@in_context(what='decorator')
-#def myfunc():
-#    print Behold._context
-#
-#
-#myfunc()
-#print Behold._context
-#
-#with in_context(what='context_manager'):
-#    print Behold._context
-
+def clear_stash(*names):
+    Behold.clear_stash(*names)
