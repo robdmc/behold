@@ -69,6 +69,9 @@ for index, letter in enumerate(letters):
     # if letter.upper() == letter and index % 2 == 0:
     #     print('index: {}'.format(index))
     Behold().when(letter.upper() == letter and index % 2 == 0).show('index')
+
+    # If you don't like typing, the Behold class is aliased to B
+    # from behold import B  # this also works
 ```
 Output:
 ```
