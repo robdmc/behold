@@ -16,12 +16,12 @@ def get_version():
     else:
         raise RuntimeError('Unable to find version string in {0}.'.format(VERSION_FILE))
 
+
 install_requires = [
 ]
 tests_require = [
     'coverage>=4.0',
     'flake8>=2.2.0',
-    'mock>=1.0.1',
     'nose>=1.3.0']
 docs_require = [
     'Sphinx>=1.2.2',
