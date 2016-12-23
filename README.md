@@ -1,7 +1,6 @@
 Behold:  A debugging tool for large Python projects
 ===
 [![Build Status](https://travis-ci.org/robdmc/behold.svg?branch=develop)](https://travis-ci.org/robdmc/behold)
-
 [![Coverage Status](https://coveralls.io/repos/github/robdmc/behold/badge.svg?branch=develop)](https://coveralls.io/github/robdmc/behold?branch=develop)
 
 Behold is a package that makes it easier to debug large Python projects. It
