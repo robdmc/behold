@@ -1,5 +1,7 @@
 Behold:  A debugging tool for large Python projects
 ===
+[![Build Status](https://travis-ci.org/robdmc/behold.svg?branch=develop)](https://travis-ci.org/robdmc/behold)
+https://travis-ci.org/robdmc/behold.svg?branch=develop
 Behold is a package that makes it easier to debug large Python projects. It
 enables you to perform [contextual debugging](#contextual-debugging-explained)
 over your entire code base.  This means that you can use the state inside one
