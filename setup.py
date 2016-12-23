@@ -22,15 +22,19 @@ install_requires = [
 tests_require = [
     'coverage>=4.0',
     'flake8>=2.2.0',
-    'nose>=1.3.0']
+    'nose>=1.3.0',
+    'coveralls',
+]
 docs_require = [
     'Sphinx>=1.2.2',
-    'sphinx_rtd_theme']
+    'sphinx_rtd_theme',
+]
 
 extras_require = {
     'test': tests_require,
     'packaging': ['wheel'],
     'docs': docs_require,
+    'dev': install_requires + tests_require + docs_require
 }
 
 everything = set(install_requires)

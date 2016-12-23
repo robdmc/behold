@@ -1,8 +1,9 @@
 import sys
 from unittest import TestCase
-try:
+
+try:  # pragma: no cover
     from cStringIO import StringIO
-except:
+except:  # pragma: no cover
     from io import StringIO
 
 from ..logger import (
@@ -30,6 +31,165 @@ class BaseTestCase(TestCase):
 def module_func():
     m, n = 1, 2  # flake8: noqa
     Behold().show('m', 'n', 'g')
+
+
+class BeholdCustom(Behold):
+    """
+    """
+    def __init__(self, *args, **kwargs):
+        super(BeholdCustom, self).__init__(*args, **kwargs)
+        self.lookup = {
+            1: 'manny',
+            2: 'moe',
+            3: 'jack',
+        }
+
+    def extract(self, item, name):
+        """
+        I am overriding the extract() method of the behold class.  This method
+        is responsible for taking an object and turning it into a string.  The
+        default behavior is to simply call str() on the object.
+        """
+        # extract the value from the behold item
+        val = getattr(item, name)
+
+        # If this is a MyItem object, enable name translation
+        if isinstance(item, Item) and name == 'name':
+            return self.lookup.get(val, None)
+        # otherwise, just call the default extractor
+        else:
+            return super(BeholdCustom, self).extract(item, name)
+
+
+class ItemTests(TestCase):
+    def test_get_item(self):
+        item = Item(a=1)
+        self.assertEqual(item['a'], 1)
+
+    def test_str(self):
+        item1 = Item(a=1)
+        item2 = Item(a=1, b='bbb')
+        self.assertEqual(repr(item1), 'Item(\'a\')')
+        self.assertEqual(repr(item2), 'Item(\'a\', \'b\')')
+
+
+class TestBeholdRepr(BaseTestCase):
+    def test_repr(self):
+        x = 1
+        with print_catcher() as catchter:
+            behold = Behold()
+            behold.show('x')
+        self.assertEqual(repr(behold), 'x: 1')
+
+class IsTrueTests(BaseTestCase):
+    def test_when_no_item(self):
+        self.assertTrue(Behold().when(True).is_true())
+        self.assertFalse(Behold().when(False).is_true())
+
+    def test_when_context_no_item(self):
+        with in_context(what='yes'):
+            self.assertTrue(Behold().when_context(what='yes').is_true())
+        self.assertFalse(Behold().when_context(what='yes').is_true())
+
+    def test_when_values_no_item(self):
+        xx = 'xx'
+        self.assertTrue(Behold().when_values(xx='xx').is_true())
+        self.assertFalse(Behold().when_values(xx='yy').is_true())
+
+    def test_when_values_item(self):
+        item = Item(xx='xx')
+        self.assertTrue(Behold().when_values(xx='xx').is_true(item))
+        self.assertFalse(Behold().when_values(xx='yy').is_true(item))
+
+class ViewContextTests(BaseTestCase):
+    def test_good_view(self):
+        xx = 1
+        with print_catcher() as catcher:
+            with in_context(what='this', where='here'):
+                Behold().view_context('what', 'where').show('xx')
+        self.assertEqual(catcher.txt, 'xx: 1, what: this, where: here\n')
+
+    def test_missing_view(self):
+        xx = 1
+        with print_catcher() as catcher:
+            with in_context(where='here'):
+                behold = Behold()
+                behold.view_context('what', 'where')
+                behold.view_context('what', 'where')
+                behold.show('xx')
+        self.assertEqual(
+            catcher.txt, 'xx: 1, what: , where: here, what: , where: here\n')
+
+    def test_strict_missing_view(self):
+        with self.assertRaises(ValueError):
+            with in_context(where='here', when='now'):
+                Behold(strict=True).view_context('what', 'where').show('xx')
+
+    def test_strict_filter_on_missing_view(self):
+        with in_context(where='here', when='now'):
+            Behold(strict=True).when_context(
+                what='this').view_context('where').is_true() #.show('xx')
+            #Behold(strict=True).view_context('where').show('xx')
+
+class ValueFilterTests(BaseTestCase):
+    def test_values_in(self):
+        items = [
+            Item(name=nn, value=nn) for nn in range(1, 4)
+        ]
+        with print_catcher() as catcher:
+            for item in items:
+                BeholdCustom().when_values(
+                    name__in=['manny', 'moe'], value=2
+                ).show(item, 'name', 'value')
+
+        self.assertTrue('name: moe, value: 2' in catcher.txt)
+
+    def test_lt(self):
+
+        items = [
+            Item(name=nn, value=nn) for nn in range(1, 4)
+        ]
+
+        with print_catcher() as catcher:
+            for item in items:
+                BeholdCustom().when_values(value__lt=2).show(item)
+        self.assertEqual(catcher.txt, 'name: manny, value: 1\n')
+
+    def test_lte(self):
+
+        items = [
+            Item(name=nn, value=nn) for nn in range(1, 4)
+        ]
+
+        with print_catcher() as catcher:
+            for item in items:
+                BeholdCustom().when_values(value__lte=2).show(item)
+        self.assertTrue('manny' in catcher.txt)
+        self.assertTrue('moe' in catcher.txt)
+
+    def test_gt(self):
+
+        items = [
+            Item(name=nn, value=nn) for nn in range(1, 4)
+        ]
+
+        with print_catcher() as catcher:
+            for item in items:
+                BeholdCustom().when_values(value__gt=2).show(item)
+        self.assertEqual(catcher.txt, 'name: jack, value: 3\n')
+
+    def test_gte(self):
+
+        items = [
+            Item(name=nn, value=nn) for nn in range(1, 4)
+        ]
+
+        with print_catcher() as catcher:
+            for item in items:
+                BeholdCustom().when_values(value__gte=2).show(item)
+        self.assertTrue('moe' in catcher.txt)
+        self.assertTrue('jack' in catcher.txt)
+
 
 class StashTests(BaseTestCase):
     def test_full_stash(self):
@@ -66,6 +226,12 @@ class StashTests(BaseTestCase):
         with self.assertRaises(ValueError):
             clear_stash('bad_name')
 
+    def test_stash_no_pass(self):
+        item = Item(nn=1)
+        #passed = Behold(tag='mytag').when(False).stash('xx')
+        passed = Behold(tag='mytag').when_values(nn=3).stash(item, 'nn')
+        self.assertEqual(passed, False)
+
 
 class GetTests(BaseTestCase):
     def test_get_okay(self):
@@ -87,22 +253,33 @@ class GetTests(BaseTestCase):
         self.assertEqual(None, result)
 
 class UnfilteredTests(BaseTestCase):
+    def test_strinfigy_no_names(self):
+        item = Item()
+        b = Behold()
+        with self.assertRaises(ValueError):
+            b.stringify_item(item, [])
+
     def test_show_item_with_args_no_kwargs(self):
         item = Item(a=1, b=2)
         with print_catcher() as catcher:
             Behold().show(item, 'a', 'b')
         self.assertTrue('a: 1, b: 2' in catcher.txt)
 
-    def test_no_auto(self):
+    def test_truthiness(self):
         item = Item(a=1, b=2)
         with print_catcher() as catcher:
-            behold = Behold(auto=False)
-            passed = behold.show(item, 'a', 'b')
+            behold = Behold()
+            with print_catcher() as catcher:
+                passed = behold.show(item, 'a', 'b')
 
         out = str(behold)
         self.assertTrue(passed)
         self.assertTrue('a: 1, b: 2' in out)
         self.assertEqual('', catcher.txt)
+
+    def test_unkown_local(self):
+        c = 1
+        self.assertFalse(Behold().when_values(a=1).show('a', 'c'))
 
     def test_show_locals_with_args_no_kwargs(self):
         a, b = 1, 2  # flake8: noqa
@@ -135,13 +312,13 @@ class UnfilteredTests(BaseTestCase):
 
         with print_catcher() as catcher:
             Behold().show('B', B=b, A=a)
-        self.assertFalse('B: 2, A: 1' in catcher.txt)
-        self.assertTrue('B: 2' in catcher.txt)
+        self.assertTrue('B: 2, A: 1' in catcher.txt)
 
     def test_show_obj_and_data(self):
-        item = Item(a=1, b=2)
-        with self.assertRaises(ValueError):
-            Behold().show(item, 'a', 'b', item=item)
+        item = Item(first='one', second='two', a=1, b=2)
+        with print_catcher() as catcher:
+            Behold().show(item, 'a', 'b', begin=item.first, end=item.second)
+        self.assertEqual(catcher.txt, 'a: 1, b: 2, begin: one, end: two\n')
 
     def test_show_obj_and_data_bad_att(self):
         item = Item(a=1, b=2)
@@ -175,6 +352,41 @@ class UnfilteredTests(BaseTestCase):
 
 
 class FilteredTests(BaseTestCase):
+    def test_strict_context_filtering(self):
+        with in_context(what='testing'):
+            is_true = Behold(strict=True).when_context(
+                what='testing').is_true()
+            self.assertTrue(is_true)
+
+        with in_context(what='testing'):
+            is_false = Behold(strict=True).when_context(where='here').is_true()
+            self.assertFalse(is_false)
+
+        with self.assertRaises(ValueError):
+            with in_context(what='testing'):
+                x = 1
+                Behold(strict=True).when_context(what='testing').view_context(
+                    'where').show('x')
+
+        with print_catcher() as catcher:
+            with in_context(what='testing'):
+                x = 1
+                Behold(strict=True).when_context(what='testing').view_context(
+                    'what').show('x')
+        self.assertEqual(catcher.txt, 'x: 1, what: testing\n')
+
+    def test_strict_value_filtering(self):
+        item = Item(a=1, b=2)
+        with print_catcher() as catcher:
+            Behold(strict=True).show(item, 'a', 'b')
+        self.assertEqual(catcher.txt, 'a: 1, b: 2\n')
+
+        with self.assertRaises(ValueError):
+            Behold(strict=True).show(item, 'c')
+
+        with self.assertRaises(ValueError):
+            Behold(strict=True).show('w', 'z')
+
     def test_arg_filtering(self):
         a, b = 1, 2  # flake8: noqa
         with print_catcher() as catcher:
@@ -188,32 +400,6 @@ class FilteredTests(BaseTestCase):
         self.assertEqual(catcher.txt, '')
         self.assertFalse(passed)
         self.assertEqual(repr(behold), '')
-
-    def test_arg_exclude(self):
-        a, b = 1, 2
-        with print_catcher() as catcher:
-            passed = Behold().excluding(a == 3).show('a', 'b')
-        self.assertEqual(catcher.txt, 'a: 1, b: 2\n')
-        self.assertTrue(passed)
-
-        with print_catcher() as catcher:
-            passed = Behold().excluding(a == 1, b == 7).show('a', 'b')
-        self.assertEqual(catcher.txt, '')
-        self.assertFalse(passed)
-
-    def test_context_exclude(self):
-        a, b = 1, 2  # flake8: noqa
-        set_context(z=0, s=0)
-        set_context(z=6, s=2)
-        with print_catcher() as catcher:
-            passed = Behold().excluding_context(z=3, s=2).show('a', 'b')
-        self.assertEqual(catcher.txt, 'a: 1, b: 2\n')
-        self.assertTrue(passed)
-
-        with print_catcher() as catcher:
-            passed = Behold().excluding_context(z=6, s=2).show('a', 'b')
-        self.assertEqual(catcher.txt, '')
-        self.assertFalse(passed)
 
     def test_context_filtering_equal(self):
         var = 'first'  # flake8: noqa
