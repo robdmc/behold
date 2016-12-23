@@ -1,0 +1,19 @@
+sudo: false
+language: python
+python:
+  - '2.7'
+  - '3.4'
+  - '3.5'
+  - '3.6-dev'
+install:
+  - pip install -e .[dev]
+before_script:
+  - flake8 .
+script:
+  - nosetests
+  - coverage report --fail-under=100
+after_success:
+    - coveralls
+notifications: 
+    email: false
+

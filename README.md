@@ -1,13 +1,19 @@
-Behold
+Behold:  A debugging tool for large Python projects
 ===
-Behold is a package that let's you perform contextual debugging.  It enables you
-to use the state inside a particular module to either trigger a step debugger or
-trigger print statements in a completely different module.  Given the stateful
-nature of many large, multi-file applications (I'm looking at you, Django), this
-capability provides valuable control over your debugging work flow.
+Behold is a package that makes it easier to debug large Python projects. It
+enables you to perform [contextual debugging](#contextual-debugging-explained)
+over your entire code base.  This means that you can use the state inside one
+module to control either printing or step-debugging in a completely different
+module.  Given the stateful nature of many large, multi-file applications (I'm
+looking at you, Django), this capability provides valuable control over your
+debugging work flow.
 
 Behold is written in pure Python with no dependencies.  It is compatible with
 both Python2 and Python3.
+
+This page shows several examples to get you started. The
+<a href="http://behold.readthedocs.io/en/latest/ref/behold.html">API documentation can be found here.</a>
+
 
 Installation
 ---
@@ -15,14 +21,14 @@ Installation
 pip install behold
 ```
 
-Table of Context
+Table of Contents
 ---
 
+* [API Documentation](http://behold.readthedocs.io/en/latest/ref/behold.html)
 * [Simple print-style debugging](#simple-print-style-debugging)
 * [Conditional printing](#conditional-printing)
-* [Tagged printing and exclusion](#tagged-printing-and-exclusion)
-* [Contextual debugging](#contextual-debugging)
-* [Triggering entry point for step debugger](#triggering-entry-point-for-step-debugger)
+* [Tagged printing](#tagged-printing)
+* [Contextual debugging](#contextual-debugging-explained)
 * [Printing object attributes](#printing-object-attributes)
 * [Printing global variables and nested attributes](#printing-global-variables-and-nested-attributes)
 * [Stashing results](#stashing-results)
@@ -33,7 +39,6 @@ Simple Print-Style Debugging
 ---
 Behold provides a uniform look to your print-style debugging statements.
 ```python
-from __future__ import print_function
 from behold import Behold
 
 letters  = ['a', 'b', 'c', 'd', 'A', 'B', 'C', 'D']
@@ -59,7 +64,6 @@ Conditional Printing
 ---
 You can filter your debugging statements based on scope variables.
 ```python
-from __future__ import print_function
 from behold import Behold
 
 letters  = ['a', 'b', 'c', 'd', 'A', 'B', 'C', 'D']
@@ -79,11 +83,11 @@ index: 4
 index: 6
 ```
 
-Tagged Printing And Exclusion
+Tagged Printing
 ---
-Each instance of a behold object can be tagged to produce distinguishable output
+Each instance of a behold object can be tagged to produce distinguishable
+output.  This makes it easy to grep for specific output you want to see.
 ```python
-from __future__ import print_function
 from behold import Behold
 
 letters  = ['a', 'b', 'c', 'd', 'A', 'B', 'C', 'D']
@@ -95,9 +99,8 @@ for index, letter in enumerate(letters):
     # if letter.upper() != letter and index % 2 != 0:
     #     print('index: {}, letter: {} odd_lowercase'.format(index, letter))
     Behold(tag='even_uppercase').when(letter.upper() == letter and index % 2 == 0).show('index', 'letter')
+    Behold(tag='odd_lowercase').when(letter.lower() == letter and index % 2 != 0).show('index', 'letter')
 
-    # Notice that when() and exclude() methods are chainable
-    Behold(tag='odd_lowercase').when(letter.upper() != letter).excluding(index % 2 == 0).show('index', 'letter')
 ```
 Output:
 ```
@@ -107,110 +110,61 @@ index: 4, letter: A, even_uppercase
 index: 6, letter: C, even_uppercase
 ```
 
-Contextual Debugging
+Contextual Debugging Explained
 ---
 Let's say you have a complicated code base consisting of many files spread over
-many directories.  In the course of chasing down bugs, you may want to print out
-what is going on inside a particular function. But you only want the printing to
-happen when that function is called from some other function defined in a
-completely different file.  Situations like this frequently arise in Django web
-projects where the code can be spread across multiple apps.  This is the use
-case where Behold really shines.  Here is an example.
+many directories. In the course of chasing down bugs, you may want to print out
+what is going on inside a particular function. But you only want the printing
+to happen when that function is called from some other function defined in a
+completely different file. Situations like this frequently arise in Django web
+projects where the code can be spread across multiple apps. This is the use
+case where Behold really shines. Here is a simple example.
 
+Say you want to debug a reusable function somewhere in one of your modules.
 ```python
-from __future__ import print_function
-from behold import Behold, in_context
+from behold import Behold
 
-def reusable_function_in_one_module():
-    letters  = ['a', 'b']
+# Some function that is used everywhere in your code base
+def my_function():
+    x = 'hello'  # your complicated logic goes here
 
-    for index, letter in enumerate(letters):
-        # this will only get called when the context is 'my_first_context_tag'
-        Behold(tag='called_in_first').when_context(
-            my_label='my_first_context_tag').show('index', 'letter')
+    # This will print the value of x, but only when in 'testing' context
+    Behold().when_context(what='testing').show('x')
 
-        # this will only get called when the context is 'my_second_context_tag'
-        Behold(tag='called_in_second').when_context(
-            my_label='my_second_context_tag').show('index', 'letter')
-
-        # this will get called in either context (notice Django-like syntax)
-        Behold(tag='called_in_either').when_context(
-            my_label__in=['my_first_context_tag', 'my_second_context_tag']
-        ).show('index', 'letter')
-
-        # Although not demonstrated here, there is an .excluding_context()
-        # method.  You can chain together multiple .when_context() and
-        # .excluding_context() methods to further refine control.
-
-# In any other file of a complex application, you can set set the context by
-# simply decorating a function. All code executed from this function will
-# be in the specified context.
-@in_context(my_label='my_first_context_tag')
-def this_function_could_be_in_a_different_module_from_a_different_package():
-    reusable_function_in_one_module()
-
-def this_function_could_be_in_yet_another_module():
-    # You can also set context using the with statement
-    with in_context(my_label='my_second_context_tag'):
-        reusable_function_in_one_module()
-
-print('-' * 35)
-this_function_could_be_in_a_different_module_from_a_different_package()
-print('-' * 35)
-this_function_could_be_in_yet_another_module()
-```
-Output:
-```
------------------------------------
-index: 0, letter: a, called_in_first
-index: 0, letter: a, called_in_either
-index: 1, letter: b, called_in_first
-index: 1, letter: b, called_in_either
------------------------------------
-index: 0, letter: a, called_in_second
-index: 0, letter: a, called_in_either
-index: 1, letter: b, called_in_second
-index: 1, letter: b, called_in_either
+    # This will drop into a step debugger only when in 'debugging' context
+    if Behold().when_context(what='debugging').is_true():
+        import pdb; pdb.set_trace()
 ```
 
-Triggering Entry Point For Step Debugger
----
-The `.show()` method of a behold object will return `True` if all filtering
-criteria are met.  Otherwise it will return `False`.  You can use this behavior
-to drop into a step debugger when in the proper context.
-
+Now, from a completely different module somewhere else in your project, you can
+control how your function gets debugged.
 ```python
-from __future__ import print_function
-from behold import Behold, in_context
+from behold import in_context
 
+# Decorate your testing function to execute in a 'testing' context
+@in_context(what='testing')
+def test_x():
+    my_function()
+test_x()  # This will print 'x: hello' to your console
 
-with in_context(what='testing'):
-    for nn in range(5):
-      # Setting auto=False means that the show() method will not automatically
-      # print to the console.  In this example the behold object only evaluates
-      # to True when in the proper context and when it passes filters.  When
-      # this happens, we drop into the debugger.
-      if Behold(auto=False).when_context(what='testing').when(nn>2).show('mm'):
-          # Drop into your python debugger of choice
-          import pdb; pdb.set_trace()
-      mm = 2 * nn
+# Use a context manager to set a debugging context
+with in_context(what='debugging'):
+    my_function()  # This will drop you into the pdb debugger.
+
 ```
+
 
 Printing Object Attributes
 ---
 Up to this point, we have only called the `.show()` method with string arguments
 holding names of local variables.  What if we wanted to show attributes of some
-object in our code?  This example shows how to do that.
+object in our code?  The example below uses an instance of the
+<a href="http://behold.readthedocs.io/en/latest/ref/behold.html#items">
+Item class
+</a>
 
 ```python
-from __future__ import print_function
-from behold import Behold
-
-# This is a simple class whos attributes are set from kwargs
-class Item(object):
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+from behold import Behold, Item
 
 # Define an item with three attributes.
 item = Item(a=1, b=2, c=3)
@@ -242,30 +196,15 @@ variables.
 
 ```python
 from __future__ import print_function
-from behold import Behold
+from behold import Behold, Item
 
 # define a global variable
 g = 'global_content'
 
-# define a class that has an attribute that is an object
-class Boss(object):
-    def __init__(self, name, employee):
-       self.name = name
-       self.employee = employee
-    def __str__(self):
-        return 'BossClass'
-
-# define the attribute object
-class Employee(object):
-    def __init__(self, name):
-       self.name = name
-    def __str__(self):
-        return 'EmployeeClass'
-
 # Now set up nested a nested function to create a closure variable
 def example_func():
-    employee = Employee(name='Toby')
-    boss = Boss(employee=employee, name='Michael')
+    employee = Item(name='Toby')
+    boss = Item(employee=employee, name='Michael')
 
     print('# Can\'t see global variable')
     Behold().show('boss', 'employee', 'g')
@@ -289,16 +228,16 @@ example_func()
 Output:
 ```bash
 # Can't see global variable
-boss: BossClass, employee: EmployeeClass, g: None
+boss: Item('employee', 'name'), employee: Item('name'), g: None
 
 # I can see the the boss's name, but not employee name
-employee: EmployeeClass, name: Michael, no_employee_name
+employee: Item('name'), name: Michael, no_employee_name
 
 # Here is how to show global variables
-boss: BossClass, global_g: global_content
+boss: Item('employee', 'name'), global_g: global_content
 
 # You can force variable ordering by supplying string arguments
-global_g: global_content, boss: BossClass
+global_g: global_content, boss: Item('employee', 'name')
 
 # And a similar strategy for nested attributes
 employee_name: Toby
@@ -405,14 +344,7 @@ simply overriding one method of the Behold class, this behavior is quite easy to
 implement.  This example shows how.
 ```python
 from __future__ import print_function
-from behold import Behold
-
-
-# Define a simple item class that can hold arbitrary attributes
-class MyItem(object):
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
+from behold import Behold, Item
 
 
 # Subclass Behold to enable custom attribute extraction
@@ -444,15 +376,19 @@ class CustomBehold(Behold):
         is responsible for taking an object and turning it into a string.  The
         default behavior is to simply call str() on the object.
         """
+        # if the lookup state hasn't been loaded, do so now.
+        if not hasattr(self.__class__, 'name_lookup'):
+            self.__class__.load_state()
+
         # extract the value from the behold item
         val = getattr(item, name)
 
-        # If this is a MyItem object, enable name translation
-        if isinstance(item, MyItem) and name == 'name':
+        # If this is a Item object, enable name translation
+        if isinstance(item, Item) and name == 'name':
             return self.__class__.name_lookup.get(val, None)
 
-        # If this is a MyItem object, enable instrument translation
-        elif isinstance(item, MyItem) and name == 'instrument':
+        # If this is a Item object, enable instrument translation
+        elif isinstance(item, Item) and name == 'instrument':
             return self.__class__.instrument_lookup.get(val, None)
 
         # otherwise, just call the default extractor
@@ -461,10 +397,7 @@ class CustomBehold(Behold):
 
 
 # define a list of items where names and instruments are given by id numbers
-items = [MyItem(name=nn, instrument=nn) for nn in range(1, 5)]
-
-# load the global state
-CustomBehold.load_state()
+items = [Item(name=nn, instrument=nn) for nn in range(1, 5)]
 
 print('\n# Show items using standard Behold class')
 for item in items:
