@@ -204,7 +204,7 @@ from behold import Behold, Item
 # define a global variable
 g = 'global_content'
 
-# Now set up nested a nested function to create a closure variable
+# Now set up a nested function to create a new scope
 def example_func():
     employee = Item(name='Toby')
     boss = Item(employee=employee, name='Michael')

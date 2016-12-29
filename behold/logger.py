@@ -197,7 +197,10 @@ class Behold(object):
         :type context_keys: string arguments
         :param context_keys: Strings with context keys
 
-        Supply this method with any context keys you would like to show.
+        This method allows you to show values of context variables along with
+        the local variables you are examining.  It is useful for sorting out
+        which context is active when filtering with "in queries" like this
+        the ``myvar__in=[1, 2]``
         """
         self._viewed_context_keys.extend(context_keys)
         return self
@@ -569,7 +572,7 @@ class Behold(object):
            item = Item(a=1, b=2)
            Behold.show(item, 'a', 'b')
 
-           # use the boolean return by show to control more debugging
+           # use the boolean returned by show to control more debugging
            a = 1
            if Behold.when(a > 1).show('a'):
                import pdb; pdb.set_trace()
@@ -634,11 +637,11 @@ class Behold(object):
         an internal method that is nevertheless exposed to allow you to
         implement custom extraction logic for variables/attributes.
 
-        This method is responsible for turning attributes into string for
+        This method is responsible for turning attributes into strings for
         printing.  The default implementation is shown below, but for custom
-        situations, you inherit from `Behold` and override this method to obtain
-        custom behavior you might find useful.  A common strategy is to load up
-        class-level state to help you make the necessary transformation.
+        situations, you can inherit from `Behold` and override this method to
+        obtain custom behavior you might find useful.  A common strategy is to
+        load up class-level state to help you make the necessary transformation.
 
         :type item: Object
         :param item: The object from which to print attributes.  If you didn't
