@@ -9,6 +9,8 @@ from .logger import (
     get_stash,
 )
 
+from .timer import Timer
+
 # single letter alias
 B = Behold
 
