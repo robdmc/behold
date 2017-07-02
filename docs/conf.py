@@ -48,7 +48,7 @@ master_doc = 'toc'
 
 # General information about the project.
 project = 'behold'
-copyright = '2015, Ambition Inc.'
+copyright = '2017, Rob deCarvalho'
 
 # The short X.Y version.
 version = get_version()
