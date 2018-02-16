@@ -117,8 +117,11 @@ class Behold(object):
     # TODO; maybe add __contains and __startwith
     # And if you do, add it to the when*() methods docstrings
 
-    def __init__(self, tag=None, strict=False, stream=None):
-        self.tag = tag
+    def __init__(self, tag='', strict=False, stream=None):
+        if tag == '':
+            self.tag = self._get_code_loc()
+        else:
+            self.tag = tag
         self.strict = strict
 
         #: Doc comment for class attribute Foo.bar.
@@ -143,6 +146,17 @@ class Behold(object):
 
         # a bool to hold whether or not all filters have passed
         self._passes_all = False
+
+    def _get_code_loc(self):
+        f = inspect.currentframe().f_back.f_back
+        fi = inspect.getframeinfo(f)
+        name = fi.filename
+
+        # commented out line below, but if you want module names rather
+        # than file names, this is one way to do it.
+        # name = inspect.getmodulename(fi.filename)
+
+        return '[{}: {}]'.format(name, fi.lineno)
 
     def reset(self):
         self.passes = False
