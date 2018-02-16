@@ -3,6 +3,7 @@ import copy
 import functools
 import inspect
 import operator
+import os
 import sys
 
 # TODO: THINK ABOUT CHANGING ALL NON-INTERFACE METHODS TO PRIVATE
@@ -150,7 +151,7 @@ class Behold(object):
     def _get_code_loc(self):
         f = inspect.currentframe().f_back.f_back
         fi = inspect.getframeinfo(f)
-        name = fi.filename
+        name = os.path.basename(fi.filename)
 
         # commented out line below, but if you want module names rather
         # than file names, this is one way to do it.
